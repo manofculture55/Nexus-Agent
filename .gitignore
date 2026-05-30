@@ -1,0 +1,9 @@
+venv/
+docs/
+__pycache__/
+*.pyc
+.env
+.cache/
+model/
+src/msedgedriver.exe
+datasets/

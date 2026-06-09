@@ -1,9 +1,49 @@
-venv/
-docs/
+# ═══════════════════════════════════════════════════
+# NEXUS Agent — .gitignore
+# Protects sensitive data, large binaries, and 
+# user-specific files from being pushed to GitHub.
+# ═══════════════════════════════════════════════════
+
+# --- Python cache & bytecode ---
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
 .env
+
+# --- Model files (large binaries — must NOT be pushed) ---
+model/*.gguf
+model/*.bin
+
+# --- Training data (user-specific) ---
+lora-weights/
+datasets/*
+!datasets/README.txt
+
+# --- Config files with sensitive / user-specific data ---
+config/api_keys.json
+config/user_memory.json
+
+# --- Internal docs (not for public GitHub) ---
+docs/
+
+# --- RAG index (generated, machine-specific) ---
+rag-index/
+
+# --- Misc ---
+*.log
+tasks_queue.json
 .cache/
-model/
+
+# --- Browser driver (large binary) ---
 src/msedgedriver.exe
-datasets/
+
+# --- Keep these config templates trackable ---
+# config/settings.json         — tracked (template values only)
+# config/permissions.json      — tracked (template values only)

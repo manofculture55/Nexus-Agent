@@ -1,0 +1,8 @@
+{
+    "model_path": "model/qwen2.5-3b-instruct-q4_k_m.gguf",
+    "max_tokens": 512,
+    "n_ctx": 4096,
+    "n_threads": 4,
+    "auto_threads": true,
+    "_comment": "Adjust n_ctx (context window) based on your RAM. 4096 for 8GB, 8192 for 16GB+. auto_threads will detect your CPU cores automatically."
+}

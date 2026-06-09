@@ -20,7 +20,7 @@ _GREETING_KEYWORDS = {"hello", "hi", "hey", "good morning", "good evening", "goo
 _SUMMARISE_KEYWORDS = {"summarise", "summarize", "summary", "summarisation", "summarization"}
 _FOLDER_KEYWORDS = {"folder", "directory", "all files", "all documents", "entire folder"}
 _QUESTION_STARTERS = ("what ", "what's", "who ", "who's", "where ", "when ", "why ", "how ",
-                       "explain ", "define ", "describe ", "tell me", "give me", "list ",
+                       "explain ", "define ", "describe ", "tell me", "give me",
                        "name ", "can you", "could you", "do you know", "is ", "are ", "does ")
 _RESET_KEYWORDS = {"reset", "clear", "delete"}
 _RESET_CONTEXT = {"training", "lora", "adapter", "custom", "model", "weights"}
@@ -57,22 +57,53 @@ _STOCK_CONTEXT = {"price", "prices", "stock", "stocks", "share", "shares", "mark
 _FETCH_WEB_KEYWORDS = {"fetch", "scrape", "download", "get data from", "extract from"}
 _SAVE_KEYWORDS = {"save", "save to", "write to", "export to", "store in"}
 
+# Phase 26 — Expanded substring patterns for natural-language matching
+_BATTERY_PATTERNS = [
+    "battery percentage", "battery status", "battery level", "battery left",
+    "battery life", "charge level", "charging status", "charge status",
+    "how much battery", "how much charge", "what is my battery",
+    "what's my battery", "check battery", "check charge", "check charging",
+    "is it charging", "am i charging", "is my laptop charging",
+    "show battery", "get battery", "battery info", "power status",
+]
+_PROCESS_PATTERNS = [
+    "list processes", "list top", "top 10 processes", "top 5 processes",
+    "top processes", "running processes", "running programs", "active programs",
+    "active processes", "show running", "what is running", "what's running",
+    "show processes", "get processes", "running apps", "running applications",
+    "task list", "list running", "check processes", "check running",
+    "show tasks", "running tasks", "monitor processes",
+]
+_SYSTEM_CMD_PATTERNS = [
+    "turn off computer", "turn off my computer", "turn off pc", "turn off my pc",
+    "turn off laptop", "turn off my laptop", "turn off the computer",
+    "power off computer", "power off pc", "power off laptop",
+    "shut down computer", "shut down pc", "shut down laptop",
+    "shut down my computer", "shut down my pc", "shut down my laptop",
+    "restart computer", "restart pc", "restart laptop", "restart my computer",
+    "restart my pc", "restart my laptop", "reboot computer", "reboot pc",
+    "reboot my computer", "reboot my pc", "reboot laptop",
+    "put to sleep", "put computer to sleep", "put pc to sleep",
+    "put my computer to sleep", "sleep mode", "go to sleep",
+]
+
 
 def fast_route(user_input):
     """
     Attempt to classify user input using simple keyword matching.
     This is MUCH faster than calling the LLM for intent detection.
 
-    Priority order (checked top-to-bottom):
-      1. Clear history / Model info / Reset training / Cancel shutdown
-      2. Shutdown / Restart / Sleep
-      3. File management (rename, copy, move, delete, list)
-      4. RAG (reindex, ask about documents)
-      5. Stock prices / Open URL / Search web / Fetch web
-      6. Greetings
-      7. Questions (catches remaining question-phrased inputs)
+    Priority order (checked top-to-bottom — Phase 26 fix):
+      1. Clear history / Model info / Reset training
+      2. Cancel shutdown
+      3. Battery / Processes / Shutdown / Restart / Sleep  ← BEFORE questions
+      4. File management (rename, copy, move, delete, list)
+      5. RAG (reindex, ask about documents)
+      6. Stock prices / Web fetch
+      7. Open URL / Search web
       8. Summarise file/folder
-      9. Battery / Processes (lowest — only if nothing else matched)
+      9. Greetings
+      10. Questions (catch-all — LAST priority)
 
     Returns:
         (action, params) tuple if a match is found, or None if the
@@ -81,23 +112,46 @@ def fast_route(user_input):
     lower = user_input.lower().strip()
     words = set(lower.split())
 
-    # --- Clear conversation history (check before general questions) ---
+    # --- 1. Clear conversation history ---
     if any(kw in lower for kw in _CLEAR_HISTORY_KEYWORDS):
         return ("ACTION:CLEAR_HISTORY", "")
 
-    # --- Model info (check before general questions) ---
+    # --- 1. Model info ---
     if any(kw in lower for kw in _MODEL_INFO_KEYWORDS):
         return ("ACTION:MODEL_INFO", "")
 
-    # --- Reset training (check before general questions) ---
+    # --- 1. Reset training ---
     if words & _RESET_KEYWORDS and words & _RESET_CONTEXT:
         return ("ACTION:RESET_TRAINING", "")
 
-    # --- Cancel shutdown (check before general questions) ---
+    # --- 2. Cancel shutdown (before shutdown/restart checks) ---
     if any(kw in lower for kw in _CANCEL_SHUTDOWN_KEYWORDS):
         return ("ACTION:CANCEL_SHUTDOWN", "")
 
-    # --- Shutdown / Restart / Sleep (check before general questions) ---
+    # --- 3. Battery (substring patterns FIRST, then keyword fallback) ---
+    # Checked BEFORE questions so "what is my battery?" → BATTERY, not QA
+    if any(pat in lower for pat in _BATTERY_PATTERNS):
+        return ("ACTION:BATTERY", "")
+    if words & _BATTERY_KEYWORDS:
+        return ("ACTION:BATTERY", "")
+
+    # --- 3. Processes (substring patterns FIRST, then keyword fallback) ---
+    # Checked BEFORE questions so "list top 10 processes" → PROCESSES, not QA
+    if any(pat in lower for pat in _PROCESS_PATTERNS):
+        return ("ACTION:PROCESSES", "")
+    if words & _PROCESS_KEYWORDS:
+        return ("ACTION:PROCESSES", "")
+
+    # --- 3. Shutdown / Restart / Sleep ---
+    # Check expanded system command patterns first
+    if any(pat in lower for pat in _SYSTEM_CMD_PATTERNS):
+        if any(kw in lower for kw in ["restart", "reboot", "re-boot"]):
+            return ("ACTION:RESTART", "")
+        elif any(kw in lower for kw in ["sleep", "hibernate", "standby"]):
+            return ("ACTION:SLEEP", "")
+        else:
+            return ("ACTION:SHUTDOWN", "")
+    # Then check original keywords
     if any(kw in lower for kw in _SHUTDOWN_KEYWORDS):
         return ("ACTION:SHUTDOWN", "")
     if any(kw in lower for kw in _RESTART_KEYWORDS):
@@ -105,14 +159,14 @@ def fast_route(user_input):
     if any(kw in lower for kw in _SLEEP_KEYWORDS):
         return ("ACTION:SLEEP", "")
 
-    # --- File management (check before general questions) ---
+    # --- 4. File management ---
     if words & _RENAME_KEYWORDS:
         filepath = extract_filepath(user_input)
         return ("ACTION:RENAME_FILE", filepath or "")
-    if words & _COPY_KEYWORDS and not any(lower.startswith(q) for q in _QUESTION_STARTERS):
+    if words & _COPY_KEYWORDS and "copyright" not in lower:
         filepath = extract_filepath(user_input)
         return ("ACTION:COPY_FILE", filepath or "")
-    if words & _MOVE_KEYWORDS and not any(lower.startswith(q) for q in _QUESTION_STARTERS):
+    if words & _MOVE_KEYWORDS and "movie" not in lower:
         filepath = extract_filepath(user_input)
         return ("ACTION:MOVE_FILE", filepath or "")
     if any(kw in lower for kw in _DELETE_KEYWORDS):
@@ -122,53 +176,37 @@ def fast_route(user_input):
         filepath = extract_filepath(user_input)
         return ("ACTION:LIST_FILES", filepath or "")
 
-    # --- RAG: reindex files (check before general questions) ---
+    # --- 5. RAG: reindex files ---
     if any(kw in lower for kw in _REINDEX_KEYWORDS):
         filepath = extract_filepath(user_input)
         return ("ACTION:REINDEX", filepath or "")
 
-    # --- RAG: ask about documents (check before general QA) ---
+    # --- 5. RAG: ask about documents (before general QA) ---
     if any(kw in lower for kw in _RAG_QA_KEYWORDS):
         return ("ACTION:RAG_QA", user_input)
 
-    # --- Stock prices (check before general questions) ---
-    # "get stock price of reliance" / "price of TCS" / "stock price reliance"
-    if words & _STOCK_CONTEXT and not any(lower.startswith(q) for q in _QUESTION_STARTERS[:3]):
-        # Check if there's a "save" intent too
+    # --- 6. Stock prices ---
+    if words & _STOCK_CONTEXT:
         if any(kw in lower for kw in _SAVE_KEYWORDS):
             return ("ACTION:FETCH_AND_SAVE", user_input)
         return ("ACTION:FETCH_STOCK", user_input)
 
-    # --- Open URL / Browse (check before general questions) ---
-    if any(lower.startswith(kw) for kw in _OPEN_URL_KEYWORDS):
-        # Check if input contains a URL-like pattern
-        if any(pat in lower for pat in _URL_PATTERN_WORDS):
-            return ("ACTION:OPEN_URL", user_input)
-        # "open google" could be a URL, let LLM decide
-        return ("ACTION:OPEN_URL", user_input)
-
-    # --- Web search (check before general questions) ---
-    if any(kw in lower for kw in _SEARCH_WEB_KEYWORDS):
-        return ("ACTION:SEARCH_WEB", user_input)
-
-    # --- Fetch web page data ---
+    # --- 6. Fetch web page data ---
     if any(kw in lower for kw in _FETCH_WEB_KEYWORDS) and any(pat in lower for pat in _URL_PATTERN_WORDS):
         if any(kw in lower for kw in _SAVE_KEYWORDS):
             return ("ACTION:FETCH_AND_SAVE", user_input)
         return ("ACTION:FETCH_WEB", user_input)
 
-    # --- Greetings (check first — very specific, no ambiguity) ---
-    if lower in _GREETING_KEYWORDS or any(lower.startswith(g) for g in _GREETING_KEYWORDS):
-        return ("ACTION:QA", user_input)
+    # --- 7. Open URL / Browse ---
+    if any(lower.startswith(kw) for kw in _OPEN_URL_KEYWORDS):
+        return ("ACTION:OPEN_URL", user_input)
 
-    # --- Questions (check BEFORE battery/processes to prevent misrouting) ---
-    # e.g. "What programs are available?" should go to QA, not PROCESSES
-    if any(lower.startswith(q) for q in _QUESTION_STARTERS) or lower.endswith("?"):
-        return ("ACTION:QA", user_input)
+    # --- 7. Web search ---
+    if any(kw in lower for kw in _SEARCH_WEB_KEYWORDS):
+        return ("ACTION:SEARCH_WEB", user_input)
 
-    # --- Summarise file or folder ---
+    # --- 8. Summarise file or folder ---
     if words & _SUMMARISE_KEYWORDS:
-        # Check if this is about a folder
         if any(kw in lower for kw in _FOLDER_KEYWORDS):
             filepath = extract_filepath(user_input)
             return ("ACTION:SUMMARISE_FOLDER", filepath or "")
@@ -178,13 +216,15 @@ def fast_route(user_input):
                 return ("ACTION:SUMMARISE_FILE", filepath)
             return None
 
-    # --- Battery (only for non-question commands like "battery", "charging?") ---
-    if words & _BATTERY_KEYWORDS:
-        return ("ACTION:BATTERY", "")
+    # --- 9. Greetings ---
+    if lower in _GREETING_KEYWORDS or any(lower.startswith(g) for g in _GREETING_KEYWORDS):
+        return ("ACTION:QA", user_input)
 
-    # --- Processes (only for non-question commands like "show processes") ---
-    if words & _PROCESS_KEYWORDS:
-        return ("ACTION:PROCESSES", "")
+    # --- 10. Questions (LAST priority — catch-all for question-phrased inputs) ---
+    # This is intentionally LAST so action keywords like battery/processes
+    # are matched first even when phrased as questions.
+    if any(lower.startswith(q) for q in _QUESTION_STARTERS) or lower.endswith("?"):
+        return ("ACTION:QA", user_input)
 
     # No keyword match — fall through to LLM
     return None

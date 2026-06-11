@@ -529,12 +529,24 @@ def route(user_input):
     Main entry point: classify the user's input and dispatch to the correct
     handler function. Returns the result string to be displayed to the user.
 
+    Priority order:
+      1. Slash commands (/task, /web, /open, etc.) — instant, no LLM
+      2. fast_route() keyword matching — fast, no LLM
+      3. LLM intent detection — slowest, used as fallback
+
     Args:
         user_input: Raw string from the user.
 
     Returns:
         A response string from the appropriate handler.
     """
+    # --- Phase 27: Check for slash commands FIRST (bypass LLM entirely) ---
+    import command_parser
+    slash_result = command_parser.execute_input(user_input)
+    if slash_result is not None:
+        return slash_result
+
+    # --- Normal routing: fast_route() → LLM fallback ---
     action, params = detect_intent(user_input)
 
     if action == "ACTION:SUMMARISE_FILE":

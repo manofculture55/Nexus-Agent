@@ -30,7 +30,25 @@ _RESTART_KEYWORDS = {"restart", "reboot", "re-boot"}
 _SLEEP_KEYWORDS = {"sleep", "hibernate", "standby"}
 _CANCEL_SHUTDOWN_KEYWORDS = {"cancel shutdown", "cancel restart", "abort shutdown", "stop shutdown"}
 _CLEAR_HISTORY_KEYWORDS = {"clear chat", "new chat", "clear history", "clear conversation",
-                            "reset chat", "forget", "start over", "new conversation"}
+                            "reset chat", "forget everything", "start over", "new conversation"}
+
+# Phase 28 — Persistent memory keywords
+_REMEMBER_PATTERNS = [
+    "remember that", "remember my", "don't forget", "do not forget",
+    "store this", "save this fact", "my favourite", "my favorite",
+    "remember i ", "remember me", "note that", "keep in mind",
+]
+_RECALL_PATTERNS = [
+    "what do you remember", "what do you know about me",
+    "recall my", "recall all", "show memories", "list memories",
+    "what have i told you", "my memories", "stored memories",
+    "what did i tell you",
+]
+_FORGET_PATTERNS = [
+    "forget my", "forget that", "forget about", "remove memory",
+    "delete memory", "clear memories", "clear all memories",
+    "forget what i told you",
+]
 _RENAME_KEYWORDS = {"rename"}
 _COPY_KEYWORDS = {"copy"}
 _MOVE_KEYWORDS = {"move"}
@@ -111,6 +129,31 @@ def fast_route(user_input):
     """
     lower = user_input.lower().strip()
     words = set(lower.split())
+
+    # --- 0. Persistent memory (Phase 28) — check BEFORE clear history ---
+    # "remember that X" → REMEMBER, not CLEAR_HISTORY
+    if any(pat in lower for pat in _REMEMBER_PATTERNS):
+        # Extract the fact text: strip the trigger phrase
+        fact = user_input
+        for pat in _REMEMBER_PATTERNS:
+            idx = lower.find(pat)
+            if idx >= 0:
+                fact = user_input[idx + len(pat):].strip()
+                break
+        return ("ACTION:REMEMBER", fact if fact else user_input)
+
+    if any(pat in lower for pat in _RECALL_PATTERNS):
+        return ("ACTION:RECALL", user_input)
+
+    if any(pat in lower for pat in _FORGET_PATTERNS):
+        # Extract what to forget
+        fact = user_input
+        for pat in _FORGET_PATTERNS:
+            idx = lower.find(pat)
+            if idx >= 0:
+                fact = user_input[idx + len(pat):].strip()
+                break
+        return ("ACTION:FORGET", fact if fact else user_input)
 
     # --- 1. Clear conversation history ---
     if any(kw in lower for kw in _CLEAR_HISTORY_KEYWORDS):
@@ -432,6 +475,9 @@ _VALID_ACTIONS = {
     "ACTION:FETCH_STOCK",
     "ACTION:FETCH_WEB",
     "ACTION:FETCH_AND_SAVE",
+    "ACTION:REMEMBER",
+    "ACTION:RECALL",
+    "ACTION:FORGET",
     "ACTION:UNKNOWN",
 }
 
@@ -475,7 +521,7 @@ def detect_intent(user_input):
     # Try to extract the ACTION from the response
     # The model might output extra text; find the ACTION:XXX pattern
     action_match = re.search(
-        r"(ACTION:(?:SUMMARISE_FILE|SUMMARISE_FOLDER|QA|BATTERY|PROCESSES|RESET_TRAINING|MODEL_INFO|SHUTDOWN|RESTART|SLEEP|CANCEL_SHUTDOWN|RENAME_FILE|COPY_FILE|MOVE_FILE|DELETE_FILE|LIST_FILES|CLEAR_HISTORY|RAG_QA|REINDEX|OPEN_URL|SEARCH_WEB|FETCH_STOCK|FETCH_WEB|FETCH_AND_SAVE|UNKNOWN))",
+        r"(ACTION:(?:SUMMARISE_FILE|SUMMARISE_FOLDER|QA|BATTERY|PROCESSES|RESET_TRAINING|MODEL_INFO|SHUTDOWN|RESTART|SLEEP|CANCEL_SHUTDOWN|RENAME_FILE|COPY_FILE|MOVE_FILE|DELETE_FILE|LIST_FILES|CLEAR_HISTORY|RAG_QA|REINDEX|OPEN_URL|SEARCH_WEB|FETCH_STOCK|FETCH_WEB|FETCH_AND_SAVE|REMEMBER|RECALL|FORGET|UNKNOWN))",
         first_line,
         re.IGNORECASE,
     )
@@ -572,8 +618,16 @@ def route(user_input):
         if _conversation_memory and not _conversation_memory.is_empty:
             history_messages = _conversation_memory.get_messages_for_model(max_turns=5)
 
+        # Inject relevant persistent memories into the prompt (Phase 28)
+        memory_context = ""
+        try:
+            import persistent_memory
+            memory_context = persistent_memory.get_relevant_memories(question)
+        except (ImportError, Exception):
+            pass
+
         # Use generate() directly with history for QA
-        prompt = "Answer the following question in 2-3 sentences. Be brief and direct:\n\n" + question
+        prompt = memory_context + "Answer the following question in 2-3 sentences. Be brief and direct:\n\n" + question
         return _generate(prompt, max_tokens=200, conversation_history=history_messages)
 
     elif action == "ACTION:BATTERY":
@@ -659,6 +713,20 @@ def route(user_input):
             _conversation_memory.clear()
             return "Conversation history cleared. Starting a fresh chat!"
         return "No conversation history to clear."
+
+    elif action == "ACTION:REMEMBER":
+        import persistent_memory
+        fact = params if params else user_input
+        return persistent_memory.remember_fact(fact)
+
+    elif action == "ACTION:RECALL":
+        import persistent_memory
+        query = params if params else None
+        return persistent_memory.recall_facts(query)
+
+    elif action == "ACTION:FORGET":
+        import persistent_memory
+        return persistent_memory.forget_fact(params if params else "")
 
     elif action == "ACTION:RAG_QA":
         import rag

@@ -589,12 +589,11 @@ def handle_open(args):
 
 
 # ---------------------------------------------------------------------------
-# /remember handler (placeholder — fully connected in Phase 28)
+# /remember handler
 # ---------------------------------------------------------------------------
 def handle_remember(args):
     """
     Handle /remember commands — store a fact in persistent memory.
-    Currently a placeholder; will be fully connected in Phase 28.
 
     Args:
         args: The fact to remember.
@@ -608,41 +607,36 @@ def handle_remember(args):
                 "  /remember I work at Google\n"
                 "  /remember my birthday is 15 March")
 
-    # Try to use persistent memory if available (Phase 28)
-    try:
-        import persistent_memory
-        return persistent_memory.remember_fact(args)
-    except (ImportError, AttributeError):
-        return (f"Memory system coming in Phase 28.\n"
-                f"Fact noted: \"{args}\"")
+    import persistent_memory
+    return persistent_memory.remember_fact(args)
 
 
 # ---------------------------------------------------------------------------
-# /recall handler (placeholder — Phase 28)
+# /recall handler
 # ---------------------------------------------------------------------------
 def handle_recall(args):
     """
     Handle /recall commands — list stored memories.
+    Optionally filter by keyword.
     """
-    try:
-        import persistent_memory
-        return persistent_memory.recall_facts(args if args else None)
-    except (ImportError, AttributeError):
-        return "Memory system coming in Phase 28."
+    import persistent_memory
+    return persistent_memory.recall_facts(args if args else None)
 
 
 # ---------------------------------------------------------------------------
-# /forget handler (placeholder — Phase 28)
+# /forget handler
 # ---------------------------------------------------------------------------
 def handle_forget(args):
     """
-    Handle /forget commands — remove a stored memory.
+    Handle /forget commands — remove a stored memory by index or keyword.
     """
-    try:
-        import persistent_memory
-        return persistent_memory.forget_fact(args)
-    except (ImportError, AttributeError):
-        return "Memory system coming in Phase 28."
+    if not args:
+        return ("Please specify which memory to forget.\n"
+                "  /forget 1              (by number from /recall)\n"
+                "  /forget favourite movie (by keyword)")
+
+    import persistent_memory
+    return persistent_memory.forget_fact(args)
 
 
 # ---------------------------------------------------------------------------

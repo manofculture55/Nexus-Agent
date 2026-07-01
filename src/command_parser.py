@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-command_parser.py — NEXUS Slash Command System
+command_parser.py -- NEXUS Slash Command System
 Detects and routes slash commands (/task, /web, /save, /remember, /open, /help)
 directly to handler functions, bypassing LLM intent detection entirely.
 This makes NEXUS faster and more predictable for known commands.
@@ -28,7 +29,7 @@ SUPPORTED_COMMANDS = {
 
 
 # ---------------------------------------------------------------------------
-# Smart URL mapping — keywords to popular websites
+# Smart URL mapping -- keywords to popular websites
 # ---------------------------------------------------------------------------
 _URL_MAP = {
     # Shopping
@@ -93,7 +94,7 @@ _URL_MAP = {
     "google maps": "https://maps.google.com",
 }
 
-# Fuzzy keyword mapping — descriptive phrases to site names
+# Fuzzy keyword mapping -- descriptive phrases to site names
 _FUZZY_MAP = {
     "shopping": "amazon",
     "online shopping": "amazon",
@@ -133,7 +134,7 @@ _FUZZY_MAP = {
 
 
 # ---------------------------------------------------------------------------
-# Task keyword mapping — /task subcommands to handler functions
+# Task keyword mapping -- /task subcommands to handler functions
 # ---------------------------------------------------------------------------
 _TASK_KEYWORDS = {
     # System info
@@ -188,7 +189,7 @@ _TASK_KEYWORDS = {
 
 
 # ---------------------------------------------------------------------------
-# Core parser — detect and extract slash commands
+# Core parser -- detect and extract slash commands
 # ---------------------------------------------------------------------------
 def parse_command(user_input):
     """
@@ -221,7 +222,7 @@ def parse_command(user_input):
 
 
 # ---------------------------------------------------------------------------
-# Multi-command parser — split input by slash prefixes
+# Multi-command parser -- split input by slash prefixes
 # ---------------------------------------------------------------------------
 def parse_multi_commands(user_input):
     """
@@ -273,7 +274,7 @@ def parse_multi_commands(user_input):
 # ---------------------------------------------------------------------------
 def handle_task(args):
     """
-    Handle /task commands — route directly to system_tasks or file_ops.
+    Handle /task commands -- route directly to system_tasks or file_ops.
 
     Args:
         args: The text after "/task ", e.g. "battery" or "list files in C:\\docs"
@@ -416,11 +417,11 @@ def handle_task(args):
 
 
 # ---------------------------------------------------------------------------
-# /web handler (placeholder — fully connected in Phase 29)
+# /web handler (placeholder -- fully connected in Phase 29)
 # ---------------------------------------------------------------------------
 def handle_web(query):
     """
-    Handle /web commands — search the web using Gemini API.
+    Handle /web commands -- search the web using Gemini API.
     Currently a placeholder; will be fully connected in Phase 29.
 
     Args:
@@ -447,7 +448,7 @@ def handle_web(query):
         import browser_tasks
         return browser_tasks.search_web(query)
     except Exception as e:
-        return (f"Web search is not yet available. (Phase 29 — Gemini API)\n"
+        return (f"Web search is not yet available. (Phase 29 -- Gemini API)\n"
                 f"Query saved: \"{query}\"\n"
                 f"Set up your Gemini API key in Settings to enable web search.")
 
@@ -457,7 +458,7 @@ def handle_web(query):
 # ---------------------------------------------------------------------------
 def handle_save(args):
     """
-    Handle /save commands — save data to a file.
+    Handle /save commands -- save data to a file.
 
     Args:
         args: Text containing the data and filename.
@@ -498,7 +499,7 @@ def handle_save(args):
 
     # If we have no data content, check if there's a previous response to save
     if not data:
-        data = "[No data provided — use /save <data> to <filename>]"
+        data = "[No data provided -- use /save <data> to <filename>]"
 
     filepath = os.path.abspath(filepath)
 
@@ -514,7 +515,7 @@ def handle_save(args):
 # ---------------------------------------------------------------------------
 def handle_open(args):
     """
-    Handle /open commands — open a URL or mapped website.
+    Handle /open commands -- open a URL or mapped website.
 
     Args:
         args: Website name, keyword, or direct URL.
@@ -560,7 +561,7 @@ def handle_open(args):
             except Exception as e:
                 return f"Could not open {site_key}: {e}"
 
-    # 4. Partial match in URL map (e.g. "book my" → "bookmyshow")
+    # 4. Partial match in URL map (e.g. "book my" -> "bookmyshow")
     for key, url in _URL_MAP.items():
         if lower in key or key in lower:
             try:
@@ -579,7 +580,7 @@ def handle_open(args):
                 except Exception as e:
                     return f"Could not open {site_key}: {e}"
 
-    # 6. Fallback — try adding .com
+    # 6. Fallback -- try adding .com
     guess_url = f"https://www.{lower.replace(' ', '')}.com"
     try:
         import browser_tasks
@@ -593,7 +594,7 @@ def handle_open(args):
 # ---------------------------------------------------------------------------
 def handle_remember(args):
     """
-    Handle /remember commands — store a fact in persistent memory.
+    Handle /remember commands -- store a fact in persistent memory.
 
     Args:
         args: The fact to remember.
@@ -616,7 +617,7 @@ def handle_remember(args):
 # ---------------------------------------------------------------------------
 def handle_recall(args):
     """
-    Handle /recall commands — list stored memories.
+    Handle /recall commands -- list stored memories.
     Optionally filter by keyword.
     """
     import persistent_memory
@@ -628,7 +629,7 @@ def handle_recall(args):
 # ---------------------------------------------------------------------------
 def handle_forget(args):
     """
-    Handle /forget commands — remove a stored memory by index or keyword.
+    Handle /forget commands -- remove a stored memory by index or keyword.
     """
     if not args:
         return ("Please specify which memory to forget.\n"
@@ -650,59 +651,59 @@ def handle_help():
         Formatted help text string.
     """
     help_text = """
-╔══════════════════════════════════════════════════════╗
-║              NEXUS Slash Commands                    ║
-╚══════════════════════════════════════════════════════╝
++------------------------------------------------------+
+|              NEXUS Slash Commands                     |
++------------------------------------------------------+
 
-  /task <action>     — Execute a system task directly
+  /task <action>     - Execute a system task directly
     Examples:
-      /task battery              → Show battery percentage
-      /task processes             → List top 10 running processes
-      /task shutdown              → Shut down computer (with confirmation)
-      /task restart               → Restart computer
-      /task sleep                 → Put computer to sleep
-      /task rename file.txt to new.txt  → Rename a file
-      /task copy file.txt to D:\\backup  → Copy a file
-      /task move file.txt to D:\\docs    → Move a file
-      /task delete old_file.txt   → Delete a file
-      /task list files in C:\\docs → List files in a folder
-      /task disk cleanup          → Run Windows disk cleanup
-      /task set wallpaper bg.jpg  → Set desktop wallpaper
-      /task model info            → Show model status
+      /task battery              -> Show battery percentage
+      /task processes             -> List top 10 running processes
+      /task shutdown              -> Shut down computer (with confirmation)
+      /task restart               -> Restart computer
+      /task sleep                 -> Put computer to sleep
+      /task rename file.txt to new.txt  -> Rename a file
+      /task copy file.txt to D:\\backup  -> Copy a file
+      /task move file.txt to D:\\docs    -> Move a file
+      /task delete old_file.txt   -> Delete a file
+      /task list files in C:\\docs -> List files in a folder
+      /task disk cleanup          -> Run Windows disk cleanup
+      /task set wallpaper bg.jpg  -> Set desktop wallpaper
+      /task model info            -> Show model status
 
-  /web <query>       — Search the web (via Gemini API)
+  /web <query>       - Search the web (via Gemini API)
     Examples:
       /web highest grossing movie in the world
       /web current weather in Mumbai
       /web price of Nifty 50 stocks
 
-  /save <data> to <filename>  — Save data to a file
+  /save <data> to <filename>  - Save data to a file
     Examples:
       /save to notes.txt
       /save my notes to output.txt
 
-  /open <website>    — Open a website in the browser
+  /open <website>    - Open a website in the browser
     Examples:
-      /open amazon               → Opens Amazon.in
-      /open youtube              → Opens YouTube
-      /open movie ticket booking → Opens BookMyShow
-      /open google.com           → Opens Google
-      /open https://github.com   → Opens any URL
+      /open amazon               -> Opens Amazon.in
+      /open youtube              -> Opens YouTube
+      /open movie ticket booking -> Opens BookMyShow
+      /open google.com           -> Opens Google
+      /open https://github.com   -> Opens any URL
 
-  /remember <fact>   — Store a fact for long-term memory
+  /remember <fact>   - Store a fact for long-term memory
     Examples:
       /remember my favourite movie is Avengers Endgame
       /remember I work at Google
 
-  /recall            — Show all stored memories
-  /forget <fact>     — Remove a stored memory
+  /recall            - Show all stored memories
+  /forget <fact>     - Remove a stored memory
 
-  /help              — Show this help message
+  /help              - Show this help message
 
-──────────────────────────────────────────────────────
+------------------------------------------------------
 Tip: You can also use multiple commands in one line:
   /web get stock prices and /save to stocks.txt
-──────────────────────────────────────────────────────
+------------------------------------------------------
 Without a slash prefix, NEXUS uses AI to understand
 your intent automatically.
 """
@@ -710,7 +711,7 @@ your intent automatically.
 
 
 # ---------------------------------------------------------------------------
-# Main dispatcher — route slash commands to handlers
+# Main dispatcher -- route slash commands to handlers
 # ---------------------------------------------------------------------------
 def execute_command(command, args):
     """
@@ -745,7 +746,7 @@ def execute_command(command, args):
 
 def execute_input(user_input):
     """
-    Process user input — check for slash commands (single or multi),
+    Process user input -- check for slash commands (single or multi),
     execute them, and return the combined result.
 
     This is the main entry point called by router.py before

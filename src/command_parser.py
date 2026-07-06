@@ -417,18 +417,17 @@ def handle_task(args):
 
 
 # ---------------------------------------------------------------------------
-# /web handler (placeholder -- fully connected in Phase 29)
+# /web handler -- Web search via Gemini API (Phase 29)
 # ---------------------------------------------------------------------------
 def handle_web(query):
     """
     Handle /web commands -- search the web using Gemini API.
-    Currently a placeholder; will be fully connected in Phase 29.
 
     Args:
         query: The search query text.
 
     Returns:
-        Result string.
+        Result string with answer and sources.
     """
     if not query:
         return ("No search query provided. Try:\n"
@@ -436,21 +435,20 @@ def handle_web(query):
                 "  /web current weather in Mumbai\n"
                 "  /web price of top 10 Nifty 50 stocks")
 
-    # Try to use Gemini API if available (Phase 29)
-    try:
-        import web_search
-        return web_search.search_web_gemini(query)
-    except (ImportError, AttributeError):
-        pass
+    # Try Gemini API first (Phase 29)
+    import web_search
+    result = web_search.search_web_gemini(query)
 
-    # Fallback: try Selenium browser search
-    try:
-        import browser_tasks
-        return browser_tasks.search_web(query)
-    except Exception as e:
-        return (f"Web search is not yet available. (Phase 29 -- Gemini API)\n"
-                f"Query saved: \"{query}\"\n"
-                f"Set up your Gemini API key in Settings to enable web search.")
+    # If Gemini returned an error about missing package or key,
+    # try Selenium fallback
+    if result and ("not installed" in result or "not configured" in result):
+        try:
+            import browser_tasks
+            return browser_tasks.search_web(query)
+        except Exception:
+            pass  # Fall through to return the Gemini error message
+
+    return result
 
 
 # ---------------------------------------------------------------------------

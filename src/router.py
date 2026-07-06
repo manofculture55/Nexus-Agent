@@ -753,11 +753,32 @@ def route(user_input):
         return browser_tasks.open_browser(url)
 
     elif action == "ACTION:SEARCH_WEB":
-        import browser_tasks
         query = _extract_search_query(user_input) or params
         if not query:
             return "Please specify what to search for (e.g. \"search for python tutorials\")."
-        return browser_tasks.search_web(query)
+        # Try Gemini API first (Phase 29)
+        try:
+            import web_search
+            result = web_search.search_web_gemini(query)
+            # If Gemini returned a real answer (not an error), use it
+            if result and "not installed" not in result and "not configured" not in result:
+                return result
+        except Exception:
+            pass
+        # Fallback: try Selenium browser search
+        try:
+            import browser_tasks
+            return browser_tasks.search_web(query)
+        except Exception:
+            pass
+        # Both failed
+        try:
+            import api_config
+            return api_config.get_setup_instructions()
+        except ImportError:
+            return ("Web search is not available.\n"
+                    "Install google-genai and set your API key in config/api_keys.json\n"
+                    "Or install selenium for browser-based search.")
 
     elif action == "ACTION:FETCH_STOCK":
         import web_fetch

@@ -528,9 +528,282 @@ class QuickOpenApp:
     # Menu actions
     # ------------------------------------------------------------------
     def _open_settings(self):
-        """Open settings -- placeholder for Phase 31."""
-        self._append_chat("NEXUS: ", "nexus")
-        self._append_chat("Settings panel will be available in a future update.\n\n", "info")
+        """Open the Settings dialog (Toplevel window)."""
+        t = self._theme
+
+        # Prevent multiple settings windows
+        if hasattr(self, '_settings_win') and self._settings_win and self._settings_win.winfo_exists():
+            self._settings_win.lift()
+            self._settings_win.focus_force()
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("NEXUS Settings")
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=t["bg_dark"])
+        self._settings_win = win
+
+        # Size and position
+        sw, sh = 400, 520
+        x = self.root.winfo_x() + (self.root.winfo_width() - sw) // 2
+        y = self.root.winfo_y() + 30
+        win.geometry(f"{sw}x{sh}+{x}+{y}")
+
+        # --- Title bar ---
+        title_bar = tk.Frame(win, bg=t["bg_medium"], height=34)
+        title_bar.pack(fill=tk.X)
+        title_bar.pack_propagate(False)
+
+        tk.Label(title_bar, text="  Settings", font=FONT_TITLE,
+                 bg=t["bg_medium"], fg=t["fg_text"]).pack(side=tk.LEFT, padx=6)
+
+        close_lbl = tk.Label(title_bar, text=" \u2715 ", font=("Segoe UI", 10, "bold"),
+                             bg=t["bg_medium"], fg=t["error_red"], cursor="hand2")
+        close_lbl.pack(side=tk.RIGHT, padx=4)
+        close_lbl.bind("<Button-1>", lambda e: win.destroy())
+        close_lbl.bind("<Enter>", lambda e: close_lbl.config(bg="#C0392B"))
+        close_lbl.bind("<Leave>", lambda e: close_lbl.config(bg=t["bg_medium"]))
+
+        # Make title bar draggable
+        self._settings_drag_x = 0
+        self._settings_drag_y = 0
+        def _start(e):
+            self._settings_drag_x, self._settings_drag_y = e.x, e.y
+        def _drag(e):
+            win.geometry(f"+{win.winfo_x() + e.x - self._settings_drag_x}+{win.winfo_y() + e.y - self._settings_drag_y}")
+        title_bar.bind("<Button-1>", _start)
+        title_bar.bind("<B1-Motion>", _drag)
+
+        # --- Scrollable content ---
+        canvas = tk.Canvas(win, bg=t["bg_dark"], highlightthickness=0)
+        scrollbar = tk.Scrollbar(win, orient=tk.VERTICAL, command=canvas.yview)
+        content = tk.Frame(canvas, bg=t["bg_dark"])
+
+        content.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=content, anchor="nw", width=sw - 20)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Mouse wheel scrolling
+        def _on_mousewheel(e):
+            canvas.yview_scroll(-1 * (e.delta // 120), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # ========= SECTION: API Key =========
+        self._settings_section(content, t, "Gemini API Key")
+
+        api_frame = tk.Frame(content, bg=t["bg_dark"])
+        api_frame.pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        # Load current key
+        current_key = ""
+        try:
+            import api_config
+            k = api_config.load_api_key("gemini_api_key")
+            if k:
+                current_key = k
+        except ImportError:
+            pass
+
+        api_entry = tk.Entry(api_frame, font=FONT_INPUT, bg=t["bg_medium"],
+                             fg=t["fg_text"], insertbackground=t["fg_text"],
+                             relief=tk.FLAT, show="*")
+        api_entry.pack(fill=tk.X, ipady=6, padx=2, pady=2)
+        if current_key:
+            api_entry.insert(0, current_key)
+        else:
+            api_entry.insert(0, "")
+            api_entry.config(fg=t["fg_dim"])
+
+        # Show/hide toggle
+        api_visible = [False]
+        def toggle_key_vis():
+            api_visible[0] = not api_visible[0]
+            api_entry.config(show="" if api_visible[0] else "*")
+            vis_btn.config(text="Hide" if api_visible[0] else "Show")
+
+        vis_btn = tk.Button(api_frame, text="Show", font=FONT_PILL,
+                            bg=t["pill_bg"], fg=t["fg_text"], relief=tk.FLAT,
+                            cursor="hand2", command=toggle_key_vis)
+        vis_btn.pack(anchor="e", pady=2)
+
+        tk.Label(api_frame, text="Get a free key: https://aistudio.google.com/apikey",
+                 font=FONT_STATUS, bg=t["bg_dark"], fg=t["fg_dim"]).pack(anchor="w")
+
+        # ========= SECTION: Model Config =========
+        self._settings_section(content, t, "Model Configuration")
+
+        model_frame = tk.Frame(content, bg=t["bg_dark"])
+        model_frame.pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        # Load current settings
+        import json as _json
+        settings_data = {}
+        settings_path = os.path.join(os.path.dirname(__file__), "..", "config", "settings.json")
+        settings_path = os.path.abspath(settings_path)
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                settings_data = _json.load(f)
+        except (FileNotFoundError, _json.JSONDecodeError):
+            pass
+
+        model_entries = {}
+        for field, default in [("max_tokens", 512), ("n_ctx", 4096), ("n_threads", 4)]:
+            row = tk.Frame(model_frame, bg=t["bg_dark"])
+            row.pack(fill=tk.X, pady=2)
+            tk.Label(row, text=field, font=FONT_PILL, bg=t["bg_dark"],
+                     fg=t["fg_dim"], width=12, anchor="w").pack(side=tk.LEFT)
+            ent = tk.Entry(row, font=FONT_INPUT, bg=t["bg_medium"],
+                           fg=t["fg_text"], insertbackground=t["fg_text"],
+                           relief=tk.FLAT, width=10)
+            ent.pack(side=tk.LEFT, padx=4, ipady=4)
+            ent.insert(0, str(settings_data.get(field, default)))
+            model_entries[field] = ent
+
+        # ========= SECTION: Folder Permissions =========
+        self._settings_section(content, t, "Folder Permissions")
+
+        folder_frame = tk.Frame(content, bg=t["bg_dark"])
+        folder_frame.pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        # Listbox of current folders
+        folder_list_frame = tk.Frame(folder_frame, bg=t["bg_medium"])
+        folder_list_frame.pack(fill=tk.X, pady=2)
+
+        folder_listbox = tk.Listbox(
+            folder_list_frame, font=FONT_STATUS, bg=t["bg_chat"],
+            fg=t["fg_text"], selectbackground=t["accent"],
+            relief=tk.FLAT, height=4, activestyle="none"
+        )
+        folder_listbox.pack(fill=tk.X, padx=2, pady=2)
+
+        # Load current permissions
+        try:
+            import permission_guard
+            current_paths = permission_guard.load_permissions()
+        except ImportError:
+            current_paths = []
+        for p in current_paths:
+            folder_listbox.insert(tk.END, p)
+
+        btn_row = tk.Frame(folder_frame, bg=t["bg_dark"])
+        btn_row.pack(fill=tk.X, pady=2)
+
+        def add_folder():
+            folder = filedialog.askdirectory(title="Add Allowed Folder")
+            if folder and folder not in folder_listbox.get(0, tk.END):
+                folder_listbox.insert(tk.END, folder)
+
+        def remove_folder():
+            sel = folder_listbox.curselection()
+            if sel:
+                folder_listbox.delete(sel[0])
+
+        add_btn = tk.Button(btn_row, text="+ Add Folder", font=FONT_PILL,
+                            bg=t["pill_bg"], fg=t["fg_text"], relief=tk.FLAT,
+                            cursor="hand2", command=add_folder)
+        add_btn.pack(side=tk.LEFT, padx=2)
+
+        rem_btn = tk.Button(btn_row, text="- Remove", font=FONT_PILL,
+                            bg=t["pill_bg"], fg=t["error_red"], relief=tk.FLAT,
+                            cursor="hand2", command=remove_folder)
+        rem_btn.pack(side=tk.LEFT, padx=2)
+
+        # ========= SECTION: Install Packages =========
+        self._settings_section(content, t, "Packages")
+
+        pkg_frame = tk.Frame(content, bg=t["bg_dark"])
+        pkg_frame.pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        pkg_status = tk.Label(pkg_frame, text="", font=FONT_STATUS,
+                              bg=t["bg_dark"], fg=t["fg_dim"])
+        pkg_status.pack(anchor="w")
+
+        def install_missing():
+            pkg_status.config(text="Installing... please wait", fg=t["thinking_ylw"])
+            def _do_install():
+                import subprocess
+                req_path = os.path.join(os.path.dirname(__file__), "..", "requirements.txt")
+                req_path = os.path.abspath(req_path)
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-r", req_path],
+                        capture_output=True, text=True, timeout=120
+                    )
+                    if result.returncode == 0:
+                        win.after(0, pkg_status.config, {"text": "All packages installed!", "fg": t["success_grn"]})
+                    else:
+                        win.after(0, pkg_status.config, {"text": f"Error: {result.stderr[:100]}", "fg": t["error_red"]})
+                except Exception as e:
+                    win.after(0, pkg_status.config, {"text": f"Error: {e}", "fg": t["error_red"]})
+            threading.Thread(target=_do_install, daemon=True).start()
+
+        inst_btn = tk.Button(pkg_frame, text="Install Missing Packages", font=FONT_PILL,
+                             bg=t["accent"], fg=t["fg_text"], relief=tk.FLAT,
+                             cursor="hand2", command=install_missing)
+        inst_btn.pack(anchor="w", pady=2)
+
+        # ========= Save / Cancel buttons =========
+        bottom = tk.Frame(content, bg=t["bg_dark"])
+        bottom.pack(fill=tk.X, padx=12, pady=(12, 8))
+
+        def save_all():
+            # Save API key
+            key_val = api_entry.get().strip()
+            if key_val:
+                try:
+                    import api_config
+                    api_config.save_api_key("gemini_api_key", key_val)
+                except ImportError:
+                    pass
+
+            # Save model config
+            for field, ent in model_entries.items():
+                val = ent.get().strip()
+                if val.isdigit():
+                    settings_data[field] = int(val)
+            try:
+                with open(settings_path, "w", encoding="utf-8") as f:
+                    _json.dump(settings_data, f, indent=4, ensure_ascii=False)
+            except OSError:
+                pass
+
+            # Save folder permissions
+            paths = list(folder_listbox.get(0, tk.END))
+            try:
+                import permission_guard
+                perm_data = {"allowed_paths": paths}
+                import json as _j
+                with open(permission_guard.CONFIG_PATH, "w", encoding="utf-8") as f:
+                    _j.dump(perm_data, f, indent=2)
+            except (ImportError, OSError):
+                pass
+
+            self._append_chat("NEXUS: ", "nexus")
+            self._append_chat("Settings saved.\n\n", "info")
+            win.destroy()
+
+        save_btn = tk.Button(bottom, text="Save", font=FONT_BTN,
+                             bg=t["accent"], fg=t["fg_text"], relief=tk.FLAT,
+                             cursor="hand2", command=save_all, padx=20, pady=4)
+        save_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+        cancel_btn = tk.Button(bottom, text="Cancel", font=FONT_BTN,
+                               bg=t["pill_bg"], fg=t["fg_text"], relief=tk.FLAT,
+                               cursor="hand2", command=win.destroy, padx=20, pady=4)
+        cancel_btn.pack(side=tk.LEFT)
+
+    def _settings_section(self, parent, t, title):
+        """Draw a section header inside the settings dialog."""
+        sep = tk.Frame(parent, bg=t["border"], height=1)
+        sep.pack(fill=tk.X, padx=8, pady=(10, 2))
+        lbl = tk.Label(parent, text=title, font=(FONT_MENU[0], FONT_MENU[1], "bold"),
+                       bg=t["bg_dark"], fg=t["accent"], anchor="w")
+        lbl.pack(fill=tk.X, padx=12, pady=(2, 4))
 
     def _reset_model(self):
         """Reset model training (LoRA weights)."""
@@ -564,9 +837,8 @@ class QuickOpenApp:
         threading.Thread(target=_do_train, daemon=True).start()
 
     def _manage_folders(self):
-        """Open manage folders -- placeholder for Phase 31."""
-        self._append_chat("NEXUS: ", "nexus")
-        self._append_chat("Folder management will be available in a future update.\n\n", "info")
+        """Open settings dialog to manage folders."""
+        self._open_settings()
 
     def _clear_chat(self):
         """Clear the chat area."""
@@ -576,19 +848,103 @@ class QuickOpenApp:
         self._append_chat("Chat cleared.\n\n", "info")
 
     def _show_about(self):
-        """Show About NEXUS info in chat."""
+        """Show About NEXUS dialog (Toplevel window)."""
         t = self._theme
-        about_text = (
-            "--- About NEXUS ---\n"
-            "Version: V3.0\n"
-            f"Theme: {self._theme_name}\n"
-            f"Model loaded: {'Yes' if self._model_loaded else 'No'}\n"
-            "Hotkey: Ctrl+Alt+N\n"
-            "---\n"
-            "NEXUS is a local AI assistant that runs\n"
-            "entirely on your machine.\n"
-        )
-        self._append_chat(about_text + "\n", "info")
+
+        # Prevent multiple about windows
+        if hasattr(self, '_about_win') and self._about_win and self._about_win.winfo_exists():
+            self._about_win.lift()
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("About NEXUS")
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=t["bg_dark"])
+        self._about_win = win
+
+        # Size and position
+        aw, ah = 340, 360
+        x = self.root.winfo_x() + (self.root.winfo_width() - aw) // 2
+        y = self.root.winfo_y() + 60
+        win.geometry(f"{aw}x{ah}+{x}+{y}")
+
+        # --- Title bar ---
+        title_bar = tk.Frame(win, bg=t["bg_medium"], height=34)
+        title_bar.pack(fill=tk.X)
+        title_bar.pack_propagate(False)
+
+        tk.Label(title_bar, text="  About NEXUS", font=FONT_TITLE,
+                 bg=t["bg_medium"], fg=t["fg_text"]).pack(side=tk.LEFT, padx=6)
+
+        close_lbl = tk.Label(title_bar, text=" \u2715 ", font=("Segoe UI", 10, "bold"),
+                             bg=t["bg_medium"], fg=t["error_red"], cursor="hand2")
+        close_lbl.pack(side=tk.RIGHT, padx=4)
+        close_lbl.bind("<Button-1>", lambda e: win.destroy())
+        close_lbl.bind("<Enter>", lambda e: close_lbl.config(bg="#C0392B"))
+        close_lbl.bind("<Leave>", lambda e: close_lbl.config(bg=t["bg_medium"]))
+
+        # --- Content ---
+        body = tk.Frame(win, bg=t["bg_dark"])
+        body.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
+
+        # App name
+        tk.Label(body, text="NEXUS", font=("Segoe UI", 20, "bold"),
+                 bg=t["bg_dark"], fg=t["accent"]).pack(pady=(8, 2))
+        tk.Label(body, text="Local AI Assistant", font=("Segoe UI", 10),
+                 bg=t["bg_dark"], fg=t["fg_dim"]).pack(pady=(0, 12))
+
+        # Separator
+        tk.Frame(body, bg=t["border"], height=1).pack(fill=tk.X, pady=4)
+
+        # Info rows
+        info_items = [
+            ("Version", "V3.0"),
+            ("Theme", self._theme_name),
+            ("Model loaded", "Yes" if self._model_loaded else "No"),
+        ]
+
+        # Check LoRA status
+        lora_status = "No"
+        try:
+            lora_dir = os.path.join(os.path.dirname(__file__), "..", "lora-weights")
+            if os.path.isdir(lora_dir) and os.listdir(lora_dir):
+                lora_status = "Yes"
+        except OSError:
+            pass
+        info_items.append(("LoRA applied", lora_status))
+
+        # Memory count
+        mem_count = 0
+        try:
+            import persistent_memory
+            mem_count = len(persistent_memory.load_all_facts())
+        except (ImportError, Exception):
+            pass
+        info_items.append(("Memories", str(mem_count)))
+        info_items.append(("Hotkey", "Ctrl+Alt+N"))
+
+        for label, value in info_items:
+            row = tk.Frame(body, bg=t["bg_dark"])
+            row.pack(fill=tk.X, pady=2)
+            tk.Label(row, text=label, font=FONT_MENU, bg=t["bg_dark"],
+                     fg=t["fg_dim"], width=16, anchor="w").pack(side=tk.LEFT)
+            tk.Label(row, text=value, font=FONT_MENU, bg=t["bg_dark"],
+                     fg=t["fg_text"], anchor="w").pack(side=tk.LEFT)
+
+        # Separator
+        tk.Frame(body, bg=t["border"], height=1).pack(fill=tk.X, pady=(8, 4))
+
+        tk.Label(body, text="NEXUS runs entirely on your machine.",
+                 font=FONT_STATUS, bg=t["bg_dark"], fg=t["fg_dim"]).pack(pady=(4, 0))
+        tk.Label(body, text="No cloud. No data leaves your PC.",
+                 font=FONT_STATUS, bg=t["bg_dark"], fg=t["fg_dim"]).pack()
+
+        # Close button
+        close_btn = tk.Button(body, text="Close", font=FONT_BTN,
+                              bg=t["accent"], fg=t["fg_text"], relief=tk.FLAT,
+                              cursor="hand2", command=win.destroy, padx=20, pady=4)
+        close_btn.pack(pady=(12, 0))
 
     # ------------------------------------------------------------------
     # Theme switching

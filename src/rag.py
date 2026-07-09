@@ -60,11 +60,10 @@ def _load_embedding_model():
         print("  Run: pip install sentence-transformers")
         return None
 
-    import ui
-    ui.print_status(f"Loading embedding model ({EMBEDDING_MODEL_NAME})...")
+    print(f"  Loading embedding model ({EMBEDDING_MODEL_NAME})...")
     try:
         _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-        ui.print_status("Embedding model loaded.")
+        print("  Embedding model loaded.")
         return _embedding_model
     except Exception as e:
         print(f"[ERROR] Failed to load embedding model: {e}")
@@ -91,7 +90,6 @@ def build_index(folder_path):
         return ("FAISS is not installed. Please run:\n"
                 "  pip install faiss-cpu")
 
-    import ui
     from permission_guard import is_allowed
     from utils import chunk_text, clean_text
 
@@ -128,18 +126,18 @@ def build_index(folder_path):
 
     for i, filename in enumerate(files, 1):
         filepath = os.path.join(folder_path, filename)
-        ui.print_status(f"Reading file {i}/{total_files}: {filename}...")
+        print(f"  Reading file {i}/{total_files}: {filename}...")
 
         raw_text = file_ops.read_file(filepath)
 
         # Check if the reader returned an error
         if raw_text.startswith(file_ops._ERROR_PREFIXES):
-            ui.print_status(f"  Skipping {filename} (read error)")
+            print(f"  Skipping {filename} (read error)")
             continue
 
         cleaned = clean_text(raw_text)
         if not cleaned:
-            ui.print_status(f"  Skipping {filename} (empty after cleaning)")
+            print(f"  Skipping {filename} (empty after cleaning)")
             continue
 
         # Chunk the text (smaller chunks for RAG — 500 words with 50 overlap)
@@ -156,14 +154,14 @@ def build_index(folder_path):
         return "No readable content found in any files."
 
     # --- Generate embeddings ---
-    ui.print_status(f"Generating embeddings for {len(all_chunks)} chunks...")
+    print(f"  Generating embeddings for {len(all_chunks)} chunks...")
 
     texts = [c["text"] for c in all_chunks]
     embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
     embeddings = np.array(embeddings, dtype="float32")
 
     # --- Build FAISS index ---
-    ui.print_status("Building FAISS index...")
+    print("  Building FAISS index...")
 
     dimension = embeddings.shape[1]
     index = faiss.IndexFlatIP(dimension)  # Inner product (cosine sim with normalized vectors)
@@ -301,8 +299,7 @@ def ask(question):
         return ("No RAG index found. Please index a folder first.\n"
                 "  Example: \"reindex my files in C:\\Documents\"")
 
-    import ui
-    ui.print_status("Searching your documents...")
+    print("  Searching your documents...")
 
     # Search for relevant chunks
     results = search(question, top_k=3)
@@ -334,7 +331,7 @@ def ask(question):
 
     # Call the LLM
     from model_loader import generate
-    ui.print_status("Generating answer from your documents...")
+    print("  Generating answer from your documents...")
     answer = generate(prompt, max_tokens=300)
 
     # Append source references

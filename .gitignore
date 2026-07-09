@@ -41,6 +41,9 @@ rag-index/
 tasks_queue.json
 .cache/
 
+# --- Archived old interfaces (no longer needed) ---
+src/_archive/
+
 # --- Browser driver (large binary) ---
 src/msedgedriver.exe
 

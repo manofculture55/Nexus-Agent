@@ -13,7 +13,6 @@ import openpyxl
 from model_loader import generate
 from permission_guard import is_allowed, load_permissions
 from utils import chunk_text, clean_text, format_size
-import ui
 
 
 # ---------------------------------------------------------------------------
@@ -200,10 +199,10 @@ def summarise_file(filepath):
         return generate(prompt, max_tokens=250)
 
     # Multiple chunks — summarise each, then combine
-    ui.print_status(f"File is large ({len(chunks)} chunks). Summarising each chunk...")
+    print(f"  File is large ({len(chunks)} chunks). Summarising each chunk...")
     chunk_summaries = []
     for i, chunk in enumerate(chunks, 1):
-        ui.print_status(f"Processing chunk {i}/{len(chunks)}...")
+        print(f"  Processing chunk {i}/{len(chunks)}...")
         prompt = "Summarise the following text in 3-5 sentences. Be brief:\n\n" + chunk
         summary = generate(prompt, max_tokens=250)
         chunk_summaries.append(summary)
@@ -259,7 +258,7 @@ def summarise_folder(folderpath):
     summaries = {}
     for filename in files:
         filepath = os.path.join(folderpath, filename)
-        ui.print_status(f"Processing {filename}...")
+        print(f"  Processing {filename}...")
         summaries[filename] = summarise_file(filepath)
 
     # Build combined text
@@ -270,7 +269,7 @@ def summarise_folder(folderpath):
     combined = "\n\n".join(combined_parts)
 
     # Generate master summary
-    ui.print_status("Generating master summary...")
+    print("  Generating master summary...")
     master_prompt = "Create one master summary combining all these documents:\n\n" + combined
     master_summary = generate(master_prompt)
 

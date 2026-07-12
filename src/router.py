@@ -746,11 +746,16 @@ def route(user_input):
         return rag.build_index(params)
 
     elif action == "ACTION:OPEN_URL":
-        import browser_tasks
         url = _extract_url(user_input) or params
         if not url:
             return "Please specify which URL to open (e.g. \"open google.com\")."
-        return browser_tasks.open_browser(url)
+        try:
+            import browser_tasks
+            return browser_tasks.open_browser(url)
+        except ImportError:
+            return ("Selenium is not installed.\n"
+                    "Install with: pip install selenium\n"
+                    "Or use Settings > Install Missing Packages.")
 
     elif action == "ACTION:SEARCH_WEB":
         query = _extract_search_query(user_input) or params
@@ -774,14 +779,19 @@ def route(user_input):
         # Both failed
         try:
             import api_config
-            return api_config.get_setup_instructions()
+            return api_config.get_setup_instructions() + "\n\nOr use Settings > API Key in the Quick Menu."
         except ImportError:
             return ("Web search is not available.\n"
-                    "Install google-genai and set your API key in config/api_keys.json\n"
-                    "Or install selenium for browser-based search.")
+                    "Set up your API key in Settings > API Key,\n"
+                    "or install selenium for browser-based search.")
 
     elif action == "ACTION:FETCH_STOCK":
-        import web_fetch
+        try:
+            import web_fetch
+        except ImportError:
+            return ("yfinance is not installed.\n"
+                    "Install with: pip install yfinance\n"
+                    "Or use Settings > Install Missing Packages.")
         symbols = _extract_stock_symbols(user_input)
         if not symbols:
             return "Please specify which stocks to look up (e.g. \"price of Reliance\")."

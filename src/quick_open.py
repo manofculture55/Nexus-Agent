@@ -69,7 +69,7 @@ class QuickOpenApp:
         self._setup_window()
         self._build_ui()
         self._setup_hotkey()
-        self._load_model_async()
+        self._check_deps_and_load()
 
     # ------------------------------------------------------------------
     # Window setup
@@ -1026,6 +1026,98 @@ class QuickOpenApp:
 
         # Status -- refresh appearance
         self._append_chat(f"Theme changed to: {self._theme_name}\n\n", "info")
+
+    # ------------------------------------------------------------------
+    # Dependency check + model loading
+    # ------------------------------------------------------------------
+    def _check_deps_and_load(self):
+        """Check dependencies before loading the model."""
+        try:
+            import dep_checker
+            result = dep_checker.check_dependencies()
+
+            # If required packages are missing, show error dialog
+            if result["missing_required"]:
+                missing = result["missing_required"]
+                pip_names = [p[0] for p in missing]
+                msg_lines = ["Required packages are missing:\n"]
+                for pip_name, desc in missing:
+                    msg_lines.append(f"  - {pip_name} ({desc})")
+                cmd = dep_checker.get_install_command(pip_names)
+                msg_lines.append(f"\nInstall with:\n  {cmd}")
+                msg_text = "\n".join(msg_lines)
+
+                self._set_status("Missing required packages", self._theme["error_red"])
+                self._append_chat("NEXUS: ", "nexus")
+                self._append_chat(msg_text + "\n\n", "error")
+
+                # Show a Toplevel error dialog
+                self._show_dep_error_dialog(msg_text)
+                return  # Don't load model
+
+            # If optional packages are missing, show in status bar
+            if result["missing_optional"]:
+                summary = dep_checker.get_missing_optional_summary()
+                self._set_status(summary, self._theme["thinking_ylw"])
+            else:
+                self._set_status("All packages OK -- loading model...",
+                                 self._theme["fg_dim"])
+
+        except ImportError:
+            # dep_checker itself not found — just proceed
+            pass
+
+        # Load model
+        self._load_model_async()
+
+    def _show_dep_error_dialog(self, message):
+        """Show a modal error dialog for missing required dependencies."""
+        t = self._theme
+
+        win = tk.Toplevel(self.root)
+        win.title("Missing Dependencies")
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=t["bg_dark"])
+
+        sw, sh = 380, 280
+        x = self.root.winfo_x() + (self.root.winfo_width() - sw) // 2
+        y = self.root.winfo_y() + 80
+        win.geometry(f"{sw}x{sh}+{x}+{y}")
+
+        # Title bar
+        title_bar = tk.Frame(win, bg=t["error_red"], height=30)
+        title_bar.pack(fill=tk.X)
+        title_bar.pack_propagate(False)
+        tk.Label(title_bar, text="  Missing Dependencies", font=FONT_TITLE,
+                 bg=t["error_red"], fg="#FFFFFF").pack(side=tk.LEFT, padx=6)
+
+        # Body
+        body = tk.Frame(win, bg=t["bg_dark"])
+        body.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
+
+        msg_label = tk.Label(body, text=message, font=FONT_STATUS,
+                             bg=t["bg_dark"], fg=t["fg_text"],
+                             justify=tk.LEFT, anchor="nw", wraplength=340)
+        msg_label.pack(fill=tk.BOTH, expand=True)
+
+        # Install button
+        def try_install():
+            win.destroy()
+            self._open_settings()
+
+        btn_frame = tk.Frame(body, bg=t["bg_dark"])
+        btn_frame.pack(fill=tk.X, pady=(8, 0))
+
+        tk.Button(btn_frame, text="Open Settings", font=FONT_BTN,
+                  bg=t["accent"], fg=t["fg_text"], relief=tk.FLAT,
+                  cursor="hand2", command=try_install,
+                  padx=16, pady=4).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Button(btn_frame, text="Close", font=FONT_BTN,
+                  bg=t["pill_bg"], fg=t["fg_text"], relief=tk.FLAT,
+                  cursor="hand2", command=win.destroy,
+                  padx=16, pady=4).pack(side=tk.LEFT)
 
     # ------------------------------------------------------------------
     # Model loading
